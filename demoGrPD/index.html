@@ -1,0 +1,705 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Interactive GPD Viewer</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f7f4;
+      --ink: #171717;
+      --muted: #686868;
+      --line: #d8d8d0;
+      --panel: #ffffff;
+      --blue: #2476a8;
+      --orange: #e56b1f;
+      --green: #2f8a4b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      align-items: center;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+    .control {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-left: auto;
+    }
+    label, .small {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    select, button {
+      border: 1px solid var(--line);
+      background: white;
+      color: var(--ink);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font: inherit;
+      font-size: 13px;
+    }
+    button {
+      cursor: pointer;
+    }
+    button.active {
+      border-color: var(--blue);
+      color: var(--blue);
+      box-shadow: inset 0 0 0 1px var(--blue);
+    }
+    main {
+      display: grid;
+      grid-template-columns: 360px minmax(0, 1fr);
+      min-height: 0;
+    }
+    aside {
+      border-right: 1px solid var(--line);
+      background: var(--panel);
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      min-width: 0;
+    }
+    .details {
+      padding: 14px 16px 0;
+    }
+    .details h2 {
+      margin: 0 0 6px;
+      font-size: 15px;
+      letter-spacing: 0;
+    }
+    .details p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .grid-wrap {
+      min-height: 0;
+      padding: 8px 12px 12px;
+    }
+    .workspace {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: minmax(0, 1fr);
+    }
+    .scene {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      background: #fbfbf8;
+    }
+    svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .axis text {
+      font-size: 11px;
+      fill: var(--muted);
+    }
+    .axis line, .gridline {
+      stroke: var(--line);
+      stroke-width: 1;
+    }
+    .interval-dot {
+      cursor: pointer;
+      stroke: white;
+      stroke-width: 1.5;
+    }
+    .interval-dot.selected {
+      stroke: var(--ink);
+      stroke-width: 2.5;
+    }
+    .rank-label {
+      fill: white;
+      font-size: 10px;
+      font-weight: 700;
+      pointer-events: none;
+      text-anchor: middle;
+      dominant-baseline: central;
+    }
+    .point {
+      fill: #111;
+      stroke: white;
+      stroke-width: 1.2;
+    }
+    .edge-base {
+      stroke: #d0d0ca;
+      stroke-width: 1;
+      opacity: 0.4;
+    }
+    .edge-leverage {
+      stroke: var(--green);
+      stroke-linecap: round;
+    }
+    .edge-rep {
+      stroke-linecap: round;
+    }
+    footer {
+      border-top: 1px solid var(--line);
+      background: var(--panel);
+      padding: 12px 16px;
+      display: grid;
+      gap: 10px;
+    }
+    .rep-strip {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+    .rep-card {
+      flex: 0 0 260px;
+      text-align: left;
+      white-space: normal;
+      line-height: 1.35;
+    }
+    .rep-card strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+    .chain {
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
+      max-height: 48px;
+      overflow: hidden;
+    }
+    .readout {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    @media (max-width: 900px) {
+      header { align-items: flex-start; }
+      .control { margin-left: 0; width: 100%; }
+      main { grid-template-columns: 1fr; grid-template-rows: 340px minmax(420px, 1fr); }
+      aside { border-right: 0; border-bottom: 1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Interactive GPD Viewer</h1>
+      <div class="control">
+        <label for="example-select">Example</label>
+        <select id="example-select"></select>
+        <label for="degree-select">Diagram</label>
+        <select id="degree-select">
+          <option value="1">H1</option>
+          <option value="0">H0</option>
+        </select>
+        <label for="weight-view-select">Weights</label>
+        <select id="weight-view-select">
+          <option value="simplices">Simplices</option>
+          <option value="vertices">Vertices</option>
+        </select>
+        <button id="toggle-rep" class="active" type="button">Representative Overlay</button>
+      </div>
+    </header>
+    <main>
+      <aside>
+        <section class="details">
+          <h2 id="interval-title">Interval</h2>
+          <p id="interval-copy">Select a nonzero GPD interval.</p>
+        </section>
+        <section class="grid-wrap">
+          <svg id="interval-grid" role="img" aria-label="GPD interval grid"></svg>
+        </section>
+      </aside>
+      <section class="workspace">
+        <div class="scene">
+          <svg id="scene" role="img" aria-label="Point cloud and VR skeleton"></svg>
+        </div>
+      </section>
+    </main>
+    <footer>
+      <div class="readout" id="readout"></div>
+      <div class="rep-strip" id="rep-strip"></div>
+    </footer>
+  </div>
+  <script src="data.js"></script>
+  <script>
+    const state = {
+      exampleIndex: 0,
+      degree: 1,
+      intervalIndex: 0,
+      representativeIndex: 0,
+      weightView: "simplices",
+      showRepresentative: false,
+    };
+
+    const select = document.getElementById("example-select");
+    const degreeSelect = document.getElementById("degree-select");
+    const weightViewSelect = document.getElementById("weight-view-select");
+    const gridSvg = document.getElementById("interval-grid");
+    const sceneSvg = document.getElementById("scene");
+    const title = document.getElementById("interval-title");
+    const copy = document.getElementById("interval-copy");
+    const strip = document.getElementById("rep-strip");
+    const readout = document.getElementById("readout");
+    const toggleRep = document.getElementById("toggle-rep");
+    toggleRep.classList.toggle("active", state.showRepresentative);
+    toggleRep.textContent = state.showRepresentative ? "Representative Overlay On" : "Representative Overlay Off";
+
+    for (const [idx, example] of window.GPD_DASHBOARD_DATA.examples.entries()) {
+      const option = document.createElement("option");
+      option.value = String(idx);
+      option.textContent = example.title;
+      select.appendChild(option);
+    }
+
+    select.addEventListener("change", () => {
+      state.exampleIndex = Number(select.value);
+      state.intervalIndex = 0;
+      state.representativeIndex = 0;
+      render();
+    });
+
+    degreeSelect.addEventListener("change", () => {
+      state.degree = Number(degreeSelect.value);
+      state.intervalIndex = 0;
+      state.representativeIndex = 0;
+      render();
+    });
+
+    weightViewSelect.addEventListener("change", () => {
+      state.weightView = weightViewSelect.value;
+      renderScene();
+      renderBottom();
+    });
+
+    toggleRep.addEventListener("click", () => {
+      state.showRepresentative = !state.showRepresentative;
+      toggleRep.classList.toggle("active", state.showRepresentative);
+      toggleRep.textContent = state.showRepresentative ? "Representative Overlay On" : "Representative Overlay Off";
+      renderScene();
+    });
+
+    function currentExample() {
+      return window.GPD_DASHBOARD_DATA.examples[state.exampleIndex];
+    }
+
+    function currentDegreePayload() {
+      return currentExample().degrees[String(state.degree)];
+    }
+
+    function currentInterval() {
+      const payload = currentDegreePayload();
+      return payload.intervals[state.intervalIndex] || null;
+    }
+
+    function currentRepresentative() {
+      const interval = currentInterval();
+      if (!interval || interval.representatives.length === 0) return null;
+      return interval.representatives[state.representativeIndex] || interval.representatives[0];
+    }
+
+    function clearSvg(svg) {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+    }
+
+    function svgEl(name, attrs = {}) {
+      const el = document.createElementNS("http://www.w3.org/2000/svg", name);
+      for (const [key, value] of Object.entries(attrs)) {
+        el.setAttribute(key, String(value));
+      }
+      return el;
+    }
+
+    function render() {
+      renderGrid();
+      renderScene();
+      renderBottom();
+    }
+
+    function renderGrid() {
+      const payload = currentDegreePayload();
+      clearSvg(gridSvg);
+      const width = gridSvg.clientWidth || 320;
+      const height = gridSvg.clientHeight || 320;
+      gridSvg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      const margin = { left: 56, right: 20, top: 20, bottom: 50 };
+      const plotW = Math.max(1, width - margin.left - margin.right);
+      const plotH = Math.max(1, height - margin.top - margin.bottom);
+      const maxIndex = payload.levels.length;
+      const maxPersistence = Math.max(1e-12, ...payload.intervals.map(i => i.persistence));
+      const hasInfiniteDeath = payload.intervals.some(interval => interval.deathIndex === null);
+
+      function x(index) {
+        return margin.left + (index / Math.max(1, maxIndex)) * plotW;
+      }
+      function y(index) {
+        return margin.top + (1 - index / Math.max(1, maxIndex)) * plotH;
+      }
+      function axisTicks(maxTickIndex, targetCount = 6) {
+        if (maxTickIndex <= targetCount) {
+          return Array.from({ length: maxTickIndex + 1 }, (_, index) => index);
+        }
+        const ticks = new Set([0, maxTickIndex]);
+        for (let idx = 1; idx < targetCount; idx++) {
+          ticks.add(Math.round((idx * maxTickIndex) / targetCount));
+        }
+        return Array.from(ticks).sort((left, right) => left - right);
+      }
+      function tickLabel(index, allowInfinity = false) {
+        if (allowInfinity && index >= payload.levels.length) return "inf";
+        const value = payload.levels[Math.min(index, payload.levels.length - 1)];
+        if (Math.abs(value) < 1e-12) return "0";
+        if (Math.abs(value) >= 100 || Math.abs(value) < 0.01) return value.toExponential(1);
+        return Number(value.toPrecision(3)).toString();
+      }
+      for (let i = 0; i <= maxIndex; i++) {
+        gridSvg.appendChild(svgEl("line", { x1: x(i), y1: margin.top, x2: x(i), y2: margin.top + plotH, class: "gridline" }));
+        gridSvg.appendChild(svgEl("line", { x1: margin.left, y1: y(i), x2: margin.left + plotW, y2: y(i), class: "gridline" }));
+      }
+      const axis = svgEl("g", { class: "axis" });
+      axis.appendChild(svgEl("line", { x1: margin.left, y1: margin.top + plotH, x2: margin.left + plotW, y2: margin.top + plotH }));
+      axis.appendChild(svgEl("line", { x1: margin.left, y1: margin.top, x2: margin.left, y2: margin.top + plotH }));
+      const birthTickMax = Math.max(0, payload.levels.length - 1);
+      const deathTickMax = hasInfiniteDeath ? maxIndex : birthTickMax;
+      axisTicks(birthTickMax).forEach(index => {
+        axis.appendChild(svgEl("line", {
+          x1: x(index),
+          y1: margin.top + plotH,
+          x2: x(index),
+          y2: margin.top + plotH + 4,
+        }));
+        const tick = svgEl("text", {
+          x: x(index),
+          y: margin.top + plotH + 17,
+          "text-anchor": "middle",
+        });
+        tick.textContent = tickLabel(index);
+        axis.appendChild(tick);
+      });
+      axisTicks(deathTickMax).forEach(index => {
+        axis.appendChild(svgEl("line", {
+          x1: margin.left - 4,
+          y1: y(index),
+          x2: margin.left,
+          y2: y(index),
+        }));
+        const tick = svgEl("text", {
+          x: margin.left - 8,
+          y: y(index) + 3.5,
+          "text-anchor": "end",
+        });
+        tick.textContent = tickLabel(index, hasInfiniteDeath);
+        axis.appendChild(tick);
+      });
+      const xLabel = svgEl("text", { x: margin.left + plotW / 2, y: height - 8, "text-anchor": "middle" });
+      xLabel.textContent = "birth";
+      axis.appendChild(xLabel);
+      const yLabel = svgEl("text", { x: 12, y: margin.top + plotH / 2, "text-anchor": "middle", transform: `rotate(-90 12 ${margin.top + plotH / 2})` });
+      yLabel.textContent = "death";
+      axis.appendChild(yLabel);
+      gridSvg.appendChild(axis);
+
+      payload.intervals.forEach((interval, idx) => {
+        const deathGrid = interval.deathIndex === null ? maxIndex : interval.deathIndex;
+        const radius = 5 + 2.5 * Math.sqrt(interval.rank);
+        const intensity = interval.persistence / maxPersistence;
+        const color = `rgb(${Math.round(36 + 190 * intensity)}, ${Math.round(112 - 45 * intensity)}, ${Math.round(168 - 110 * intensity)})`;
+        const dot = svgEl("circle", {
+          cx: x(interval.birthIndex),
+          cy: y(deathGrid),
+          r: radius,
+          fill: color,
+          class: `interval-dot${idx === state.intervalIndex ? " selected" : ""}`,
+        });
+        dot.addEventListener("click", () => {
+          state.intervalIndex = idx;
+          state.representativeIndex = 0;
+          render();
+        });
+        dot.appendChild(svgEl("title"));
+        dot.firstChild.textContent = `${interval.label}, rank ${interval.rank}`;
+        gridSvg.appendChild(dot);
+        if (interval.rank > 1) {
+          const label = svgEl("text", {
+            x: x(interval.birthIndex),
+            y: y(deathGrid) + 0.5,
+            class: "rank-label",
+          });
+          label.textContent = String(interval.rank);
+          gridSvg.appendChild(label);
+        }
+      });
+    }
+
+    function dataBounds(points) {
+      const xs = points.map(p => p[0]);
+      const ys = points.map(p => p[1]);
+      let minX = Math.min(...xs), maxX = Math.max(...xs);
+      let minY = Math.min(...ys), maxY = Math.max(...ys);
+      if (Math.abs(maxX - minX) < 1e-8) { minX -= 1; maxX += 1; }
+      if (Math.abs(maxY - minY) < 1e-8) { minY -= 1; maxY += 1; }
+      const padX = 0.12 * (maxX - minX);
+      const padY = 0.12 * (maxY - minY);
+      return { minX: minX - padX, maxX: maxX + padX, minY: minY - padY, maxY: maxY + padY };
+    }
+
+    function renderScene() {
+      const example = currentExample();
+      const payload = currentDegreePayload();
+      const interval = currentInterval();
+      const rep = currentRepresentative();
+      clearSvg(sceneSvg);
+      const width = sceneSvg.clientWidth || 700;
+      const height = sceneSvg.clientHeight || 520;
+      sceneSvg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      const margin = 32;
+      const bounds = dataBounds(example.points);
+      const scale = Math.min(
+        (width - 2 * margin) / (bounds.maxX - bounds.minX),
+        (height - 2 * margin) / (bounds.maxY - bounds.minY)
+      );
+      const xOffset = (width - scale * (bounds.maxX - bounds.minX)) / 2;
+      const yOffset = (height - scale * (bounds.maxY - bounds.minY)) / 2;
+      function px(point) {
+        return xOffset + scale * (point[0] - bounds.minX);
+      }
+      function py(point) {
+        return height - (yOffset + scale * (point[1] - bounds.minY));
+      }
+      function pointName(vertex) {
+        return example.pointLabels && example.pointLabels[vertex] ? example.pointLabels[vertex] : `vertex ${vertex}`;
+      }
+
+      for (const edge of example.edges) {
+        const [i, j] = edge.vertices;
+        sceneSvg.appendChild(svgEl("line", {
+          x1: px(example.points[i]),
+          y1: py(example.points[i]),
+          x2: px(example.points[j]),
+          y2: py(example.points[j]),
+          class: "edge-base",
+        }));
+      }
+
+      if (interval) {
+        const maxLev = Math.max(1e-12, ...interval.leverage);
+        if (state.weightView === "vertices") {
+          const vertexWeights = inducedVertexWeights(example, payload, interval);
+          const maxVertexWeight = Math.max(1e-12, ...vertexWeights);
+          vertexWeights.forEach((score, vertex) => {
+            if (score <= 1e-9) return;
+            const normalized = score / maxVertexWeight;
+            const dot = svgEl("circle", {
+              cx: px(example.points[vertex]),
+              cy: py(example.points[vertex]),
+              r: 7 + 24 * Math.sqrt(normalized),
+              fill: "#2f8a4b",
+              opacity: 0.12 + 0.5 * normalized,
+            });
+            dot.appendChild(svgEl("title"));
+            dot.firstChild.textContent = `${pointName(vertex)}, weight ${score.toPrecision(4)}`;
+            sceneSvg.appendChild(dot);
+          });
+        } else if (state.degree === 0) {
+          interval.leverage.forEach((score, idx) => {
+            if (score <= 1e-9) return;
+            const atom = payload.atoms[idx];
+            const vertex = atom.vertices[0];
+            const normalized = score / maxLev;
+            const dot = svgEl("circle", {
+              cx: px(example.points[vertex]),
+              cy: py(example.points[vertex]),
+              r: 8 + 20 * Math.sqrt(normalized),
+              fill: "#2f8a4b",
+              opacity: 0.14 + 0.42 * normalized,
+            });
+            dot.appendChild(svgEl("title"));
+            dot.firstChild.textContent = `${pointName(vertex)}, weight ${score.toPrecision(4)}`;
+            sceneSvg.appendChild(dot);
+          });
+        } else {
+          interval.leverage.forEach((score, idx) => {
+            if (score <= 1e-9) return;
+            const atom = payload.atoms[idx];
+            const [i, j] = atom.vertices;
+            const normalized = score / maxLev;
+            sceneSvg.appendChild(svgEl("line", {
+              x1: px(example.points[i]),
+              y1: py(example.points[i]),
+              x2: px(example.points[j]),
+              y2: py(example.points[j]),
+              class: "edge-leverage",
+              "stroke-width": 1 + 7 * normalized,
+              opacity: 0.16 + 0.58 * normalized,
+            }));
+          });
+        }
+      }
+
+      if (state.showRepresentative && rep) {
+        const maxCoeff = Math.max(1e-12, ...rep.coefficients.map(Math.abs));
+        rep.coefficients.forEach((coefficient, idx) => {
+          if (Math.abs(coefficient) <= 1e-8) return;
+          const normalized = Math.abs(coefficient) / maxCoeff;
+          const atom = payload.atoms[idx];
+          if (state.degree === 0) {
+            const vertex = atom.vertices[0];
+            sceneSvg.appendChild(svgEl("circle", {
+              cx: px(example.points[vertex]),
+              cy: py(example.points[vertex]),
+              r: 5 + 13 * Math.sqrt(normalized),
+              fill: coefficient >= 0 ? "#1f77b4" : "#ff7f0e",
+              stroke: "white",
+              "stroke-width": 1.2,
+              opacity: 0.9,
+            }));
+          } else {
+            const [i, j] = atom.vertices;
+            sceneSvg.appendChild(svgEl("line", {
+              x1: px(example.points[i]),
+              y1: py(example.points[i]),
+              x2: px(example.points[j]),
+              y2: py(example.points[j]),
+              class: "edge-rep",
+              stroke: coefficient >= 0 ? "#1f77b4" : "#ff7f0e",
+              "stroke-width": 2 + 6 * normalized,
+              "stroke-dasharray": coefficient >= 0 ? "none" : "9 5",
+              opacity: 0.92,
+            }));
+          }
+        });
+      }
+
+      example.points.forEach((point, vertex) => {
+        const dot = svgEl("circle", {
+          cx: px(point),
+          cy: py(point),
+          r: 4.2,
+          class: "point",
+        });
+        dot.appendChild(svgEl("title"));
+        dot.firstChild.textContent = pointName(vertex);
+        sceneSvg.appendChild(dot);
+      });
+    }
+
+    function renderBottom() {
+      const example = currentExample();
+      const payload = currentDegreePayload();
+      const interval = currentInterval();
+      const rep = currentRepresentative();
+      strip.innerHTML = "";
+      if (!interval) {
+        title.textContent = "No nonzero intervals";
+        copy.textContent = `This example has no nonzero H${state.degree} GPD intervals under the current settings.`;
+        readout.textContent = "";
+        return;
+      }
+      const deathText = interval.deathValue === null ? "inf" : interval.deathValue.toPrecision(4);
+      title.textContent = `${example.title}: H${state.degree} ${interval.label}`;
+      const viewText = state.weightView === "vertices" ? "vertex-aggregated weights" : "simplex weights";
+      copy.textContent = `rank ${interval.rank}; ${viewText}; birth index ${interval.birthIndex}; death index ${interval.deathIndex === null ? "inf" : interval.deathIndex}`;
+      readout.innerHTML = `
+        <span>birth ${interval.birthValue.toPrecision(4)}</span>
+        <span>death ${deathText}</span>
+        <span>persistence ${interval.persistence.toPrecision(4)}</span>
+        <span>${example.layout}</span>
+        <span>${state.degree === 0 ? "vertices" : "edges"} ${payload.atoms.length}</span>
+        <span>${activeWeightStats(example, payload, interval)}</span>
+        <span>${representativeStats(rep)}</span>
+      `;
+
+      interval.representatives.forEach((candidate, idx) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `rep-card${idx === state.representativeIndex ? " active" : ""}`;
+        button.innerHTML = `
+          <strong>Candidate ${idx + 1}</strong>
+          <span class="small">support ${candidate.support}; length ${candidate.length.toPrecision(4)}</span>
+          <div class="chain">${candidate.chain}</div>
+        `;
+        button.addEventListener("click", () => {
+          state.representativeIndex = idx;
+          render();
+        });
+        strip.appendChild(button);
+      });
+      if (rep === null) {
+        const empty = document.createElement("div");
+        empty.className = "small";
+        empty.textContent = "No representative candidates for this interval.";
+        strip.appendChild(empty);
+      }
+    }
+
+    function inducedVertexWeights(example, payload, interval) {
+      const weights = new Array(example.points.length).fill(0);
+      interval.leverage.forEach((score, idx) => {
+        if (score <= 1e-12) return;
+        const vertices = payload.atoms[idx].vertices;
+        if (vertices.length === 1) {
+          weights[vertices[0]] += score;
+        } else if (vertices.length === 2) {
+          weights[vertices[0]] += 0.5 * score;
+          weights[vertices[1]] += 0.5 * score;
+        }
+      });
+      return weights;
+    }
+
+    function weightRatio(values) {
+      const nonzero = values.filter(value => value > 1e-9);
+      if (nonzero.length === 0) return "leverage empty";
+      const max = Math.max(...nonzero);
+      const min = Math.min(...nonzero);
+      const ratio = max / Math.max(min, 1e-12);
+      return ratio.toPrecision(3);
+    }
+
+    function activeWeightStats(example, payload, interval) {
+      if (state.weightView === "vertices") {
+        return `vertex weight max/min ${weightRatio(inducedVertexWeights(example, payload, interval))}`;
+      }
+      return `leverage max/min ${weightRatio(interval.leverage)}`;
+    }
+
+    function representativeStats(rep) {
+      if (!rep) return "rep none";
+      const nonzero = rep.coefficients.map(Math.abs).filter(value => value > 1e-9);
+      if (nonzero.length === 0) return "rep empty";
+      const max = Math.max(...nonzero);
+      const min = Math.min(...nonzero);
+      const ratio = max / Math.max(min, 1e-12);
+      return `rep coeff max/min ${ratio.toPrecision(3)}`;
+    }
+
+    window.addEventListener("resize", render);
+    render();
+  </script>
+</body>
+</html>
